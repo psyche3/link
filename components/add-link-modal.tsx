@@ -3,9 +3,9 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { X } from "lucide-react"
 import type { Link } from "@/app/page"
 import { findIconParkIcon } from "@/lib/icon-mapper"
+import Modal from "./modal"
 
 interface AddLinkModalProps {
   categories: Array<{ id: string; name: string }>
@@ -13,9 +13,10 @@ interface AddLinkModalProps {
   onClose: () => void
   editingLink?: Link | null
   selectedCategory: string
+  onOpenBatchAdd?: () => void
 }
 
-export default function AddLinkModal({ categories, onAdd, onClose, editingLink, selectedCategory }: AddLinkModalProps) {
+export default function AddLinkModal({ categories, onAdd, onClose, editingLink, selectedCategory, onOpenBatchAdd }: AddLinkModalProps) {
   const [name, setName] = useState("")
   const [url, setUrl] = useState("")
   const [alias, setAlias] = useState("")
@@ -83,16 +84,22 @@ export default function AddLinkModal({ categories, onAdd, onClose, editingLink, 
   }
 
   return (
-    <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50">
-      <div className="glass-card-sm border-white/20 shadow-xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-white/20">
-          <h2 className="text-xl font-bold text-white">{editingLink ? "编辑链接" : "添加新链接"}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded transition-colors">
-            <X size={20} className="text-white/50" />
+    <Modal title={editingLink ? "编辑链接" : "添加新链接"} onClose={onClose}>
+      {!editingLink && onOpenBatchAdd && (
+        <div className="mb-3 sm:mb-4 -mt-2 sm:-mt-3">
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              onOpenBatchAdd()
+            }}
+            className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm border border-white/20"
+          >
+            批量添加
           </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      )}
+      <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           <div>
             <label className="block text-sm font-medium text-white mb-2">网站名称 *</label>
             <input
@@ -162,8 +169,7 @@ export default function AddLinkModal({ categories, onAdd, onClose, editingLink, 
               {editingLink ? "更新链接" : "添加链接"}
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }

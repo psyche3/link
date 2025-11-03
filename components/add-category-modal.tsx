@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { X } from "lucide-react"
+import Modal from "./modal"
 
 interface AddCategoryModalProps {
   onAdd: (name: string) => void
@@ -27,16 +27,8 @@ export default function AddCategoryModal({ onAdd, onClose }: AddCategoryModalPro
   }
 
   return (
-    <div className="fixed inset-0 backdrop-blur-sm bg-black/30 flex items-center justify-center p-4 z-50">
-      <div className="glass-card-sm border-white/20 shadow-xl w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center justify-between p-6 border-b border-white/20">
-          <h2 className="text-xl font-bold text-white">添加新分类</h2>
-          <button onClick={onClose} className="p-1 hover:bg-white/10 rounded transition-colors">
-            <X size={20} className="text-white/50" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+    <Modal title="添加新分类" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-white mb-2">分类名称 *</label>
             <input
@@ -64,8 +56,7 @@ export default function AddCategoryModal({ onAdd, onClose }: AddCategoryModalPro
               添加分类
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }

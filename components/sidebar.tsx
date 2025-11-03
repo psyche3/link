@@ -1,6 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { MoreVertical } from "lucide-react"
 
 interface Category {
   id: string
@@ -12,9 +16,73 @@ interface SidebarProps {
   selectedCategory: string
   onSelectCategory: (id: string) => void
   onDeleteCategory: (id: string) => void
-  onAddCategory: () => void
+  onReorderCategories: (categories: Category[]) => void
+  onUpdateCategories: (categories: Category[]) => void
+  onShowCategoryManager: () => void
   viewMode: string
   onViewModeChange: (mode: string) => void
+}
+
+interface SortableCategoryItemProps {
+  category: Category
+  selectedCategory: string
+  onSelect: (id: string) => void
+}
+
+function SortableCategoryItem({
+  category,
+  selectedCategory,
+  onSelect,
+}: SortableCategoryItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const isSelected = selectedCategory === category.id
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative mx-1 sm:mx-2">
+      <button
+        onClick={() => onSelect(category.id)}
+        className={`group relative w-full px-3 sm:px-4 pl-4 sm:pl-5 py-2.5 sm:py-3 rounded-md text-xs sm:text-sm font-normal transition-all duration-200 flex items-center gap-2 ${
+          isSelected
+            ? "bg-white/20 text-white"
+            : "text-white/70 hover:bg-white/10 hover:text-white"
+        }`}
+        title={category.name}
+      >
+        {/* Win11 风格左侧指示条 */}
+        {isSelected && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 sm:h-6 bg-white rounded-r-full" />
+        )}
+        
+        {/* 拖拽手柄 */}
+        <span
+          {...attributes}
+          {...listeners}
+          className="flex-shrink-0 w-3 h-3 text-white/40 hover:text-white/60 cursor-move touch-none select-none transition-colors"
+          onClick={(e) => e.stopPropagation()}
+          title="拖拽排序"
+        >
+          <svg className="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="9" cy="12" r="1" />
+            <circle cx="15" cy="12" r="1" />
+            <circle cx="9" cy="8" r="1" />
+            <circle cx="15" cy="8" r="1" />
+            <circle cx="9" cy="16" r="1" />
+            <circle cx="15" cy="16" r="1" />
+          </svg>
+        </span>
+        
+        {/* 分类名称 */}
+        <span className="flex-1 text-left truncate">{category.name}</span>
+      </button>
+    </div>
+  )
 }
 
 export default function Sidebar({
@@ -22,69 +90,70 @@ export default function Sidebar({
   selectedCategory,
   onSelectCategory,
   onDeleteCategory,
-  onAddCategory,
+  onReorderCategories,
+  onUpdateCategories,
+  onShowCategoryManager,
 }: SidebarProps) {
-  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      const oldIndex = categories.findIndex((cat) => cat.id === active.id)
+      const newIndex = categories.findIndex((cat) => cat.id === over.id)
+
+      const newCategories = arrayMove(categories, oldIndex, newIndex)
+      onReorderCategories(newCategories)
+    }
+  }
 
   return (
-    <aside className="w-24 border-r border-white/10 glass-card-sm flex flex-col py-6 gap-4 relative z-20">
+    <aside className="w-24 sm:w-28 md:w-32 border-r border-white/10 glass-card-sm flex flex-col py-2 sm:py-3 gap-2 relative z-20">
       {/* Home button */}
-      <div className="px-4 text-center">
-        <button className="icon-btn text-white hover:bg-white/20 w-full" title="首页">
-          <svg className="w-5 h-5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <div className="px-2 sm:px-3 mb-1">
+        <button 
+          className="group relative w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-md text-white/70 hover:bg-white/10 hover:text-white transition-all duration-200 flex items-center justify-center" 
+          title="首页"
+        >
+          <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
           </svg>
         </button>
       </div>
 
-      {/* Categories - text labels */}
-      <nav className="flex-1 flex flex-col gap-2 px-2 overflow-y-auto">
-        {categories.map((category) => (
-          <div
-            key={category.id}
-            onMouseEnter={() => setHoveredCategory(category.id)}
-            onMouseLeave={() => setHoveredCategory(null)}
-            className="relative group"
-          >
-            <button
-              onClick={() => onSelectCategory(category.id)}
-              className={`w-full px-3 py-2 rounded-lg text-xs font-medium transition-all truncate ${
-                selectedCategory === category.id
-                  ? "bg-white/25 text-white"
-                  : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
-              }`}
-              title={category.name}
-            >
-              {category.name}
-            </button>
+      {/* Categories - draggable */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-1 sm:px-2 py-2">
+          <SortableContext items={categories.map((cat) => cat.id)} strategy={verticalListSortingStrategy}>
+            {categories.map((category) => (
+              <SortableCategoryItem
+                key={category.id}
+                category={category}
+                selectedCategory={selectedCategory}
+                onSelect={onSelectCategory}
+              />
+            ))}
+          </SortableContext>
+        </nav>
+      </DndContext>
 
-            {/* Delete button on hover */}
-            {hoveredCategory === category.id && (
-              <button
-                onClick={() => onDeleteCategory(category.id)}
-                className="absolute -top-2 -right-2 p-1 bg-red-500/80 text-white rounded-full hover:bg-red-600 z-50 flex items-center justify-center"
-                title="删除分类"
-              >
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" />
-                </svg>
-              </button>
-            )}
-          </div>
-        ))}
-      </nav>
-
-      {/* Add category button */}
-      <button
-        onClick={onAddCategory}
-        className="icon-btn text-white bg-white/10 hover:bg-white/20 mx-2 flex items-center justify-center"
-        title="添加分类"
-      >
-        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </button>
+      {/* Action buttons */}
+      <div className="px-2 sm:px-3 mt-auto pt-2">
+        <button
+          onClick={onShowCategoryManager}
+          className="group relative w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-md text-white/70 hover:bg-white/10 hover:text-white transition-all duration-200 flex items-center justify-center"
+          title="分类管理"
+        >
+          <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+        </button>
+      </div>
     </aside>
   )
 }

@@ -1,9 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Copy } from "lucide-react"
+import { Copy, ArrowLeft } from "lucide-react"
 
-export default function PasswordGenerator() {
+interface PasswordGeneratorProps {
+  onBack?: () => void
+}
+
+export default function PasswordGenerator({ onBack }: PasswordGeneratorProps) {
   const [password, setPassword] = useState("")
   const [length, setLength] = useState(16)
   const [options, setOptions] = useState({
@@ -55,7 +59,19 @@ export default function PasswordGenerator() {
   }
 
   return (
-    <div className="h-full flex flex-col gap-6 max-w-md mx-auto justify-center">
+    <div className="h-full flex flex-col gap-6 max-w-md mx-auto justify-center px-4">
+      {/* 返回按钮 */}
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors w-fit mb-2"
+          title="返回"
+        >
+          <ArrowLeft size={16} />
+          <span>返回</span>
+        </button>
+      )}
+
       <div className="space-y-4">
         {/* 长度设置 */}
         <div className="space-y-3">

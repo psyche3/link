@@ -39,7 +39,7 @@ const iconMap: Record<string, string> = {
   whatsapp: "Message",
   
   // 云服务
-  aws: "Cloud",
+  aws: "Setting",
   google: "Search",
   microsoft: "Setting",
   apple: "Home",
@@ -200,7 +200,6 @@ export function getCommonIcons(): string[] {
     "Share",
     "Download",
     "Upload",
-    "Cloud",
     "Lock",
     "Unlock",
     "User",
