@@ -25,12 +25,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
-      - name: Install deps
+      - name: Enable Corepack (pnpm)
         run: |
           corepack enable
-          pnpm install --frozen-lockfile
+          corepack prepare pnpm@9 --activate
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
 
       - name: Build (Static Export)
         env:
