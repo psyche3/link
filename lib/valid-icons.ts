@@ -25,7 +25,6 @@ export const VALID_ICONS: string[] = [
   "Share",
   "Download",
   "Upload",
-  "Cloud",
   "Lock",
   "Unlock",
   "User",

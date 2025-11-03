@@ -129,14 +129,10 @@
   }
 
   /* 修复卡片遮挡问题：确保grid容器允许hover时超出边界 */
+  /* 响应式网格布局 */
   .cards-grid {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 auto-rows-min;
+    @apply grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6 auto-rows-min;
     perspective: 1000px;
-  }
-
-  /* 调整grid容器的overflow属性以允许卡片hover时超出边界显示 */
-  .cards-grid {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 auto-rows-min;
   }
 
   /* Added frosted glass card effect */
@@ -152,4 +148,37 @@
   .icon-btn {
     @apply p-2.5 rounded-full transition-all duration-200 hover:scale-110 hover:bg-white/10 dark:hover:bg-white/5;
   }
+
+  /* 自定义边距类 */
+  .margin-15 {
+    margin: 15px;
+  }
+}
+
+/* 全局滚动条样式 - 细、透明、符合系统风格 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  backdrop-filter: blur(8px);
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox 滚动条样式 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
