@@ -25,3 +25,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AWS credentials and sensitive config
+server/s3-config.js
+**/s3-config.js
+*.secret
+*.key
