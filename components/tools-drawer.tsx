@@ -5,9 +5,11 @@ import type React from "react"
 import { useState } from "react"
 import { ChevronDown, ChevronUp } from "lucide-react"
 
+type ViewMode = "links" | "json-editor" | "password-generator"
+
 interface ToolsDrawerProps {
-  viewMode: string
-  onViewModeChange: (mode: string) => void
+  viewMode: ViewMode
+  onViewModeChange: (mode: ViewMode) => void
   onAddLink: () => void
 }
 

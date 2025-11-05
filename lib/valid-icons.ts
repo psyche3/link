@@ -53,7 +53,7 @@ export function isValidIcon(iconName: string | undefined): boolean {
  * 获取有效的图标名称，如果无效则返回默认图标
  */
 export function getValidIcon(iconName: string | undefined, defaultIcon: string = "Link"): string {
-  if (isValidIcon(iconName)) {
+  if (iconName && isValidIcon(iconName)) {
     return iconName
   }
   return defaultIcon
