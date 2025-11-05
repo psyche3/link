@@ -83,21 +83,21 @@ export default function ToolsDrawer({
         <div className="flex justify-center">
           <div className="glass-card-sm p-2 sm:p-3 rounded-lg w-fit max-w-full">
             <div className="flex gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:h-0">
-              {tools.map((tool) => (
-                <button
-                  key={tool.id}
-                  onClick={() => handleToolClick(tool.id)}
+            {tools.map((tool) => (
+              <button
+                key={tool.id}
+                onClick={() => handleToolClick(tool.id)}
                   className={`flex flex-col items-center justify-center gap-1 px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 rounded-md transition-colors duration-200 flex-shrink-0 ${
-                    (tool.id === "json-editor" || tool.id === "password-generator") && viewMode === tool.id
-                      ? "bg-white/25 text-white"
-                      : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
-                  }`}
-                  title={tool.name}
-                >
+                  (tool.id === "json-editor" || tool.id === "password-generator") && viewMode === tool.id
+                    ? "bg-white/25 text-white"
+                    : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                }`}
+                title={tool.name}
+              >
                   <span className="scale-90 sm:scale-100">{tool.icon}</span>
                   <span className="text-[10px] sm:text-xs whitespace-nowrap">{tool.name}</span>
-                </button>
-              ))}
+              </button>
+            ))}
             </div>
           </div>
         </div>

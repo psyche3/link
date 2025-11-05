@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Search } from "lucide-react"
 import Sidebar from "@/components/sidebar"
 import LinkCard from "@/components/link-card"
@@ -10,10 +10,10 @@ import CategoryManagerModal from "@/components/category-manager-modal"
 import TimeDisplay from "@/components/time-display"
 import JsonEditor from "@/components/json-editor"
 import PasswordGenerator from "@/components/password-generator"
-import ToolsDrawer from "@/components/tools-drawer"
 import BatchAddModal from "@/components/batch-add-modal"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { getValidIcon } from "@/lib/valid-icons"
+import apiClient from "@/lib/api"
 
 export interface Link {
   id: string
@@ -48,73 +48,77 @@ export default function Home() {
   const importInputId = "import-file-input"
   const backgroundInputId = "background-file-input"
   const [viewMode, setViewMode] = useState<ViewMode>("links")
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isScrollingProgrammatically = useRef(false)
 
   useEffect(() => {
     setMounted(true)
-    const savedCategories = localStorage.getItem("categories")
-    const savedLinks = localStorage.getItem("links")
-    const savedBackground = localStorage.getItem("backgroundImage")
-    const savedBgColor = localStorage.getItem("backgroundColor") || ""
 
-    const defaultCategories: Category[] = [
-      { id: "1", name: "开发工具" },
-      { id: "2", name: "设计工具" },
-      { id: "3", name: "通讯工具" },
-    ]
+    const loadFromLocal = () => {
+      const savedCategories = localStorage.getItem("categories")
+      const savedLinks = localStorage.getItem("links")
+      const savedBackground = localStorage.getItem("backgroundImage")
+      const savedBgColor = localStorage.getItem("backgroundColor") || ""
 
-    const defaultLinks: Link[] = [
-      {
-        id: "1",
-        name: "GitHub",
-        url: "https://github.com",
-        categoryId: "1",
-        alias: "代码仓库",
-      },
-      {
-        id: "2",
-        name: "Stack Overflow",
-        url: "https://stackoverflow.com",
-        categoryId: "1",
-        alias: "问答社区",
-      },
-      {
-        id: "3",
-        name: "Figma",
-        url: "https://figma.com",
-        categoryId: "2",
-        alias: "设计工具",
-      },
-      {
-        id: "4",
-        name: "Slack",
-        url: "https://slack.com",
-        categoryId: "3",
-        alias: "团队沟通",
-      },
-    ]
+      const defaultCategories: Category[] = [
+        { id: "1", name: "开发工具" },
+        { id: "2", name: "设计工具" },
+        { id: "3", name: "通讯工具" },
+      ]
 
-    const parsedCategories: Category[] = savedCategories ? JSON.parse(savedCategories) : defaultCategories
-    let parsedLinks: Link[] = savedLinks ? JSON.parse(savedLinks) : defaultLinks
+      const defaultLinks: Link[] = [
+        { id: "1", name: "GitHub", url: "https://github.com", categoryId: "1", alias: "代码仓库" },
+        { id: "2", name: "Stack Overflow", url: "https://stackoverflow.com", categoryId: "1", alias: "问答社区" },
+        { id: "3", name: "Figma", url: "https://figma.com", categoryId: "2", alias: "设计工具" },
+        { id: "4", name: "Slack", url: "https://slack.com", categoryId: "3", alias: "团队沟通" },
+      ]
 
-    // 清理无效的图标类型，确保所有链接都使用有效的图标
-    parsedLinks = parsedLinks.map((link) => {
-      if (link.iconType) {
-        const validIcon = getValidIcon(link.iconType, "Link")
-        // 如果图标无效，清除它，让组件重新生成
-        if (validIcon !== link.iconType) {
-          return { ...link, iconType: undefined }
+      const parsedCategories: Category[] = savedCategories ? JSON.parse(savedCategories) : defaultCategories
+      let parsedLinks: Link[] = savedLinks ? JSON.parse(savedLinks) : defaultLinks
+
+      parsedLinks = parsedLinks.map((link) => {
+        if (link.iconType) {
+          const validIcon = getValidIcon(link.iconType, "Link")
+          if (validIcon !== link.iconType) {
+            return { ...link, iconType: undefined }
+          }
         }
-      }
-      return link
-    })
+        return link
+      })
 
-    setCategories(parsedCategories)
-    setLinks(parsedLinks)
-    setBackgroundImage(savedBackground || "")
-    setBackgroundColor(savedBgColor)
-    if (parsedCategories.length > 0) {
-      setSelectedCategory(parsedCategories[0].id)
+      setCategories(parsedCategories)
+      setLinks(parsedLinks)
+      setBackgroundImage(savedBackground || "")
+      setBackgroundColor(savedBgColor)
+      if (parsedCategories.length > 0) {
+        setSelectedCategory(parsedCategories[0].id)
+      }
     }
+
+    ;(async () => {
+      try {
+        const data = await apiClient.getState()
+        const { categories = [], links = [] } = data || {}
+
+        const sanitizedLinks: Link[] = (links as Link[]).map((link) => {
+          if (link.iconType) {
+            const validIcon = getValidIcon(link.iconType, "Link")
+            if (validIcon !== link.iconType) return { ...link, iconType: undefined }
+          }
+          return link
+        })
+
+        setCategories(categories)
+        setLinks(sanitizedLinks)
+        const savedBackground = localStorage.getItem("backgroundImage")
+        const savedBgColor = localStorage.getItem("backgroundColor") || ""
+        setBackgroundImage(savedBackground || "")
+        setBackgroundColor(savedBgColor)
+        if (categories.length > 0) setSelectedCategory(categories[0].id)
+      } catch (e) {
+        loadFromLocal()
+      }
+    })()
   }, [])
 
   useEffect(() => {
@@ -126,28 +130,47 @@ export default function Home() {
     }
   }, [categories, links, backgroundImage, backgroundColor, mounted])
 
+  useEffect(() => {
+    if (!mounted) return
+    const t = setTimeout(() => {
+      apiClient.updateState({ categories, links }).catch(() => {})
+    }, 400)
+    return () => clearTimeout(t)
+  }, [categories, links, mounted])
 
-  const handleDeleteCategory = (id: string) => {
-    setCategories(categories.filter((c) => c.id !== id))
-    setLinks(links.filter((l) => l.categoryId !== id))
-    if (selectedCategory === id && categories.length > 0) {
-      setSelectedCategory(categories[0].id)
+
+  const handleDeleteCategory = async (id: string) => {
+    try {
+      await apiClient.deleteCategory(id)
+    } catch (e) {
+      // 忽略错误，继续本地删除以保持连贯性
+    } finally {
+      setCategories(categories.filter((c) => c.id !== id))
+      setLinks(links.filter((l) => l.categoryId !== id))
+      if (selectedCategory === id && categories.length > 0) {
+        setSelectedCategory(categories[0].id)
+      }
     }
   }
 
-  const handleReorderCategories = (newCategories: Category[]) => {
+  const handleReorderCategories = async (newCategories: Category[]) => {
     setCategories(newCategories)
+    try {
+      await apiClient.updateState({ categories: newCategories, links })
+    } catch (e) {}
   }
 
-  const handleUpdateCategories = (updatedCategories: Category[]) => {
+  const handleUpdateCategories = async (updatedCategories: Category[]) => {
     setCategories(updatedCategories)
-    // 如果删除的分类包含链接，同时删除这些链接
     const remainingCategoryIds = new Set(updatedCategories.map((cat) => cat.id))
-    setLinks(links.filter((link) => remainingCategoryIds.has(link.categoryId)))
-    // 如果当前选中的分类被删除，选择第一个分类
+    const newLinks = links.filter((link) => remainingCategoryIds.has(link.categoryId))
+    setLinks(newLinks)
     if (!remainingCategoryIds.has(selectedCategory) && updatedCategories.length > 0) {
       setSelectedCategory(updatedCategories[0].id)
     }
+    try {
+      await apiClient.updateState({ categories: updatedCategories, links: newLinks })
+    } catch (e) {}
   }
 
   const handleBatchAddLinks = (newLinks: Omit<Link, "id">[]) => {
@@ -159,18 +182,37 @@ export default function Home() {
     setShowBatchAddLinksModal(false)
   }
 
-  const handleAddLink = (link: Omit<Link, "id">) => {
-    if (editingLink) {
-      setLinks(links.map((l) => (l.id === editingLink.id ? { ...link, id: editingLink.id } : l)))
-      setEditingLink(null)
-    } else {
-      setLinks([...links, { ...link, id: Date.now().toString() }])
+  const handleAddLink = async (link: Omit<Link, "id">) => {
+    try {
+      if (editingLink) {
+        const updated = await apiClient.updateLink(editingLink.id, link)
+        setLinks(links.map((l) => (l.id === editingLink.id ? updated : l)))
+        setEditingLink(null)
+      } else {
+        const created = await apiClient.createLink(link)
+        setLinks([...links, created])
+      }
+    } catch (e) {
+      // 回退到本地更新，避免操作丢失
+      if (editingLink) {
+        setLinks(links.map((l) => (l.id === editingLink.id ? { ...link, id: editingLink.id } : l)))
+        setEditingLink(null)
+      } else {
+        setLinks([...links, { ...link, id: Date.now().toString() }])
+      }
+    } finally {
+      setShowAddLinkModal(false)
     }
-    setShowAddLinkModal(false)
   }
 
-  const handleDeleteLink = (id: string) => {
-    setLinks(links.filter((l) => l.id !== id))
+  const handleDeleteLink = async (id: string) => {
+    try {
+      await apiClient.deleteLink(id)
+      setLinks(links.filter((l) => l.id !== id))
+    } catch (e) {
+      // 本地回退删除
+      setLinks(links.filter((l) => l.id !== id))
+    }
   }
 
   const handleEditLink = (link: Link) => {
@@ -221,16 +263,149 @@ export default function Home() {
     reader.readAsText(file)
   }
 
-  const filteredLinks = links
-    .filter((link) => link.categoryId === selectedCategory)
-    .filter((link) => {
+  // 按分类分组所有链接
+  const linksByCategory = categories.map((category) => ({
+    category,
+    links: links.filter((link) => link.categoryId === category.id),
+  }))
+
+  // 始终显示所有分类（不再根据 selectedCategory 过滤）
+  // 应用搜索过滤
+  const filteredLinksByCategoryWithSearch = linksByCategory.map((item) => ({
+    ...item,
+    links: item.links.filter((link) => {
+      if (!searchQuery) return true
       const query = searchQuery.toLowerCase()
       return (
         link.name.toLowerCase().includes(query) ||
         link.url.toLowerCase().includes(query) ||
         (link.alias && link.alias.toLowerCase().includes(query))
       )
-    })
+    }),
+  })).filter((item) => item.links.length > 0) // 只显示有链接的分类
+
+  // 用于滚动定位的函数 - 将分类滚动到视口中心
+  const scrollToCategory = (categoryId: string) => {
+    if (!scrollContainerRef.current) return
+
+    const container = scrollContainerRef.current
+
+    if (!categoryId) {
+      // 如果选择"全部"，滚动到顶部
+      container.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    
+    // 滚动到指定分类，将分类区域中心对齐到视口中心
+    const element = document.getElementById(`category-${categoryId}`)
+    if (element) {
+      const containerRect = container.getBoundingClientRect()
+      const elementRect = element.getBoundingClientRect()
+      
+      // 计算元素中心位置
+      const elementCenter = elementRect.top + elementRect.height / 2
+      // 计算视口中心位置
+      const viewportCenter = containerRect.top + containerRect.height / 2
+      // 计算需要滚动的距离，使元素中心对齐到视口中心
+      const scrollOffset = elementCenter - viewportCenter
+      const scrollTop = container.scrollTop + scrollOffset
+      
+      container.scrollTo({ top: scrollTop, behavior: 'smooth' })
+    }
+  }
+
+  // 修改 onSelectCategory 以支持滚动定位
+  const handleSelectCategory = (categoryId: string) => {
+    setSelectedCategory(categoryId)
+    // 延迟一下确保 DOM 更新
+    isScrollingProgrammatically.current = true
+    setTimeout(() => {
+      scrollToCategory(categoryId)
+      // 滚动完成后重置标志
+      setTimeout(() => {
+        isScrollingProgrammatically.current = false
+      }, 500)
+    }, 100)
+  }
+
+  // 监听滚动，实现双向同步 - 基于视口中心位置判断
+  useEffect(() => {
+    if (!mounted || viewMode !== "links" || !scrollContainerRef.current) return
+
+    const container = scrollContainerRef.current
+    let scrollTimeout: NodeJS.Timeout | null = null
+    
+    const handleScroll = () => {
+      // 如果正在程序化滚动，不更新选中状态
+      if (isScrollingProgrammatically.current) return
+
+      // 使用节流，减少频繁更新
+      if (scrollTimeout) return
+      
+      scrollTimeout = setTimeout(() => {
+        scrollTimeout = null
+        
+        // 检查是否滚动到顶部
+        if (container.scrollTop < 50) {
+          if (selectedCategory !== "") {
+            setSelectedCategory("")
+          }
+          return
+        }
+
+        // 找到所有分类区域
+        const sections = filteredLinksByCategoryWithSearch
+          .map(({ category }) => ({
+            category,
+            element: document.getElementById(`category-${category.id}`),
+          }))
+          .filter(({ element }) => element !== null)
+
+        if (sections.length === 0) return
+
+        const containerRect = container.getBoundingClientRect()
+        // 计算视口中心位置（相对于容器）
+        const viewportCenter = containerRect.top + containerRect.height / 2
+        
+        let bestCategory: { category: Category; element: HTMLElement } | null = null
+        let minDistance = Infinity
+
+        // 遍历所有分类区域，找到最接近视口中心的那个
+        for (const { category, element } of sections) {
+          if (!element) continue
+          
+          const elementRect = element.getBoundingClientRect()
+          // 计算分类区域的中心位置
+          const elementCenter = elementRect.top + elementRect.height / 2
+          // 计算分类中心与视口中心的距离
+          const distance = Math.abs(elementCenter - viewportCenter)
+          
+          // 检查分类是否在视口中（至少部分可见）
+          const isVisible = elementRect.top < containerRect.bottom && elementRect.bottom > containerRect.top
+          
+          if (isVisible && distance < minDistance) {
+            minDistance = distance
+            bestCategory = { category, element }
+          }
+        }
+
+        // 如果找到最接近视口中心的分类，更新选中状态
+        if (bestCategory && bestCategory.category.id !== selectedCategory) {
+          setSelectedCategory(bestCategory.category.id)
+        }
+      }, 100) // 100ms 节流
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    
+    // 初始检查一次
+    handleScroll()
+
+    return () => {
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+      container.removeEventListener("scroll", handleScroll)
+    }
+  }, [mounted, viewMode, filteredLinksByCategoryWithSearch, selectedCategory])
 
   if (!mounted) return null
 
@@ -260,13 +435,13 @@ export default function Home() {
       <Sidebar
         categories={categories}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
         onDeleteCategory={handleDeleteCategory}
         onReorderCategories={handleReorderCategories}
         onUpdateCategories={handleUpdateCategories}
         onShowCategoryManager={() => setShowCategoryManagerModal(true)}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={(mode: string) => setViewMode(mode as any)}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden relative z-10">
@@ -299,16 +474,6 @@ export default function Home() {
           )}
         </div>
 
-        {viewMode === "links" && (
-          <ToolsDrawer
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onAddLink={() => {
-              setEditingLink(null)
-              setShowAddLinkModal(true)
-            }}
-          />
-        )}
 
         {showSettings && (
           <>
@@ -317,19 +482,40 @@ export default function Home() {
           </>
         )}
 
-        <div className="flex-1 overflow-visible px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4">
+        <div 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4"
+        >
           {viewMode === "links" && (
             <>
-              {filteredLinks.length === 0 ? (
+              {filteredLinksByCategoryWithSearch.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center">
                   <div className="text-6xl mb-4 opacity-50">🔗</div>
                   <p className="text-lg text-white/70 mb-2">未找到链接</p>
                   <p className="text-sm text-white/50">{searchQuery ? "调整搜索词试试" : "添加第一个链接来开始"}</p>
                 </div>
               ) : (
-                <div className="cards-grid">
-                  {filteredLinks.map((link) => (
-                    <LinkCard key={link.id} link={link} onEdit={handleEditLink} onDelete={handleDeleteLink} />
+                <div className="space-y-8 sm:space-y-10 md:space-y-12">
+                  {filteredLinksByCategoryWithSearch.map(({ category, links }) => (
+                    <section
+                      key={category.id}
+                      id={`category-${category.id}`}
+                      className="scroll-mt-4"
+                    >
+                      <div className="mb-4 sm:mb-6 flex items-center gap-3">
+                        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-white">
+                          {category.name}
+                        </h2>
+                        <span className="text-sm sm:text-base text-white/60">
+                          ({links.length})
+                        </span>
+                      </div>
+                      <div className="cards-grid">
+                        {links.map((link) => (
+                          <LinkCard key={link.id} link={link} onEdit={handleEditLink} onDelete={handleDeleteLink} />
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               )}
@@ -398,53 +584,120 @@ export default function Home() {
             <DrawerHeader className="border-b border-white/10">
               <DrawerTitle className="text-white">设置</DrawerTitle>
             </DrawerHeader>
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-4 overflow-y-auto">
+              {/* 工具栏 */}
               <div>
-                <label className="block text-sm text-white/80 mb-1">背景颜色</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={backgroundColor || "#4f46e5"}
-                    onChange={(e) => setBackgroundColor(e.target.value)}
-                    className="w-10 h-10 rounded border border-white/20 bg-transparent p-0"
-                  />
+                <label className="block text-sm text-white/80 mb-3">工具栏</label>
+                <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => setBackgroundColor("")}
-                    className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white border border-white/20"
+                    onClick={() => {
+                      setViewMode(viewMode === "json-editor" ? "links" : "json-editor")
+                      setShowSettings(false)
+                    }}
+                    className={`flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg transition-colors ${
+                      viewMode === "json-editor"
+                        ? "bg-white/25 text-white"
+                        : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                    }`}
+                    title="JSON编辑"
                   >
-                    还原默认渐变
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+                      <line x1="9" y1="9" x2="9" y2="15" />
+                      <line x1="15" y1="9" x2="15" y2="15" />
+                    </svg>
+                    <span className="text-xs">JSON编辑</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode(viewMode === "password-generator" ? "links" : "password-generator")
+                      setShowSettings(false)
+                    }}
+                    className={`flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg transition-colors ${
+                      viewMode === "password-generator"
+                        ? "bg-white/25 text-white"
+                        : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                    }`}
+                    title="密码生成"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0110 0v4" />
+                      <circle cx="12" cy="16" r="1" />
+                    </svg>
+                    <span className="text-xs">密码生成</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingLink(null)
+                      setShowAddLinkModal(true)
+                      setShowSettings(false)
+                    }}
+                    className="flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg bg-white/10 text-white/70 hover:bg-white/15 hover:text-white transition-colors"
+                    title="添加链接"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span className="text-xs">添加链接</span>
                   </button>
                 </div>
               </div>
 
-              <div className="pt-2 space-y-2">
-                <button
-                  onClick={handleExport}
-                  className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                >
-                  导出数据
-                </button>
-                <button
-                  onClick={() => document.getElementById(importInputId)?.click()}
-                  className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                >
-                  导入数据
-                </button>
+              <div className="border-t border-white/10 pt-4">
+                <label className="block text-sm text-white/80 mb-3">背景设置</label>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-white/60 mb-1">背景颜色</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={backgroundColor || "#4f46e5"}
+                        onChange={(e) => setBackgroundColor(e.target.value)}
+                        className="w-10 h-10 rounded border-0 bg-transparent p-0 cursor-pointer"
+                      />
+                      <button
+                        onClick={() => setBackgroundColor("")}
+                        className="px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white border-0 text-sm"
+                      >
+                        还原默认渐变
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setBackgroundImage("")}
+                      className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm"
+                    >
+                      清除背景图片
+                    </button>
+                    <button
+                      onClick={() => document.getElementById(backgroundInputId)?.click()}
+                      className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm"
+                    >
+                      设置背景图片
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="pt-2 space-y-2">
-                <button
-                  onClick={() => setBackgroundImage("")}
-                  className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                >
-                  清除背景图片
-                </button>
-                <button
-                  onClick={() => document.getElementById(backgroundInputId)?.click()}
-                  className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                >
-                  设置背景图片
-                </button>
+              <div className="border-t border-white/10 pt-4">
+                <label className="block text-sm text-white/80 mb-3">数据管理</label>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleExport}
+                    className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm"
+                  >
+                    导出数据
+                  </button>
+                  <button
+                    onClick={() => document.getElementById(importInputId)?.click()}
+                    className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm"
+                  >
+                    导入数据
+                  </button>
+                </div>
               </div>
             </div>
           </div>
