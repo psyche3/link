@@ -1,10 +1,13 @@
 {
-  "version": 2,
   "buildCommand": "pnpm build",
   "outputDirectory": "out",
-  "framework": "nextjs",
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "installCommand": "pnpm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ]
 }
 
