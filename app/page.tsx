@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
+import Pinyin from "tiny-pinyin"
 import { Search } from "lucide-react"
 import Sidebar from "@/components/sidebar"
 import LinkCard from "@/components/link-card"
@@ -10,7 +11,6 @@ import CategoryManagerModal from "@/components/category-manager-modal"
 import TimeDisplay from "@/components/time-display"
 import JsonEditor from "@/components/json-editor"
 import PasswordGenerator from "@/components/password-generator"
-import ToolsDrawer from "@/components/tools-drawer"
 import BatchAddModal from "@/components/batch-add-modal"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer"
 import { getValidIcon } from "@/lib/valid-icons"
@@ -48,6 +48,12 @@ export default function Home() {
   const importInputId = "import-file-input"
   const backgroundInputId = "background-file-input"
   const [viewMode, setViewMode] = useState<ViewMode>("links")
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  // 搜索字段开关与键盘选择
+  const [includeName, setIncludeName] = useState(true)
+  const [includeAlias, setIncludeAlias] = useState(true)
+  const [includeUrl, setIncludeUrl] = useState(true)
+  const [searchSelectedIndex, setSearchSelectedIndex] = useState(-1)
 
   useEffect(() => {
     setMounted(true)
@@ -212,8 +218,42 @@ export default function Home() {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string)
-        setCategories(data.categories || [])
-        setLinks(data.links || [])
+        const importedCategories = Array.isArray(data?.categories) ? data.categories : []
+        const importedLinks = Array.isArray(data?.links) ? data.links : []
+
+        const validCategories: Category[] = importedCategories
+          .filter((c: any) => c && typeof c.id === "string" && typeof c.name === "string")
+          .map((c: any) => ({ id: c.id, name: c.name }))
+
+        const isValidUrl = (u: string) => {
+          try {
+            const parsed = new URL(u)
+            return parsed.protocol === "http:" || parsed.protocol === "https:"
+          } catch {
+            return false
+          }
+        }
+        const validLinks: Link[] = importedLinks
+          .filter(
+            (l: any) =>
+              l && typeof l.name === "string" && typeof l.url === "string" && typeof l.categoryId === "string" && isValidUrl(l.url)
+          )
+          .map((l: any, idx: number) => ({
+            id: typeof l.id === "string" ? l.id : `${Date.now()}-${idx}`,
+            name: l.name,
+            url: l.url,
+            alias: typeof l.alias === "string" ? l.alias : undefined,
+            categoryId: l.categoryId,
+            iconType: typeof l.iconType === "string" ? l.iconType : undefined,
+          }))
+
+        if (validCategories.length === 0 && validLinks.length === 0) {
+          alert("导入内容为空或格式无效")
+          return
+        }
+
+        setCategories(validCategories)
+        setLinks(validLinks)
       } catch {
         alert("文件格式无效")
       }
@@ -221,16 +261,179 @@ export default function Home() {
     reader.readAsText(file)
   }
 
-  const filteredLinks = links
-    .filter((link) => link.categoryId === selectedCategory)
-    .filter((link) => {
-      const query = searchQuery.toLowerCase()
-      return (
-        link.name.toLowerCase().includes(query) ||
-        link.url.toLowerCase().includes(query) ||
-        (link.alias && link.alias.toLowerCase().includes(query))
-      )
-    })
+  // 右侧展示全部分类分区；按搜索词与字段选择过滤每个分区内的链接
+  const filteredLinksByCategory = useMemo(() => {
+    const query = searchQuery.toLowerCase()
+    const queryPinyin = Pinyin.isSupported() ? Pinyin.convertToPinyin(searchQuery, "", true).toLowerCase() : ""
+    const matchText = (text?: string) => {
+      if (!text) return false
+      const lower = text.toLowerCase()
+      if (lower.includes(query)) return true
+      if (query && Pinyin.isSupported()) {
+        const py = Pinyin.convertToPinyin(text, "", true).toLowerCase()
+        if (py.includes(queryPinyin)) return true
+      }
+      return false
+    }
+    const byCategory: Record<string, Link[]> = {}
+    for (const category of categories) {
+      byCategory[category.id] = []
+    }
+    for (const link of links) {
+      const matchName = includeName && matchText(link.name)
+      const matchAlias = includeAlias && matchText(link.alias)
+      const matchUrl = includeUrl && matchText(link.url)
+      const match = matchName || matchAlias || matchUrl
+      if (match) {
+        if (!byCategory[link.categoryId]) byCategory[link.categoryId] = []
+        byCategory[link.categoryId].push(link)
+      }
+    }
+    return byCategory
+  }, [categories, links, searchQuery, includeName, includeAlias, includeUrl])
+
+  // 扁平化匹配结果用于键盘导航（按分类顺序）
+  const flatMatchedLinks = useMemo(() => {
+    const result: { link: Link; categoryIndex: number }[] = []
+    const categoryIndexMap = new Map<string, number>()
+    categories.forEach((c, i) => categoryIndexMap.set(c.id, i))
+    for (const cat of categories) {
+      const arr = filteredLinksByCategory[cat.id] || []
+      for (const l of arr) {
+        result.push({ link: l, categoryIndex: categoryIndexMap.get(cat.id) || 0 })
+      }
+    }
+    return result
+  }, [categories, filteredLinksByCategory])
+
+  // 分区滚动与同步
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
+  const isScrollingProgrammatically = useRef(false)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const scrollToCategory = (categoryId: string) => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    if (categoryId === "") {
+      isScrollingProgrammatically.current = true
+      container.scrollTo({ top: 0, behavior: "smooth" })
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrollingProgrammatically.current = false
+      }, 400)
+      return
+    }
+    const el = sectionRefs.current[categoryId]
+    if (!el) return
+    const containerRect = container.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const currentScrollTop = container.scrollTop
+    const offset = elRect.top - containerRect.top
+    const targetTop = currentScrollTop + offset - containerRect.height / 2 + elRect.height / 2
+    isScrollingProgrammatically.current = true
+    container.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" })
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingProgrammatically.current = false
+    }, 500)
+  }
+
+  const handleSelectCategory = (id: string) => {
+    setSelectedCategory(id)
+    scrollToCategory(id)
+  }
+
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    let ticking = false
+    const onScroll = () => {
+      if (isScrollingProgrammatically.current) return
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        ticking = false
+        const containerRect = container.getBoundingClientRect()
+        const containerCenterY = containerRect.top + containerRect.height / 2
+        let closestId = ""
+        let closestDistance = Infinity
+        for (const category of categories) {
+          const el = sectionRefs.current[category.id]
+          if (!el) continue
+          const rect = el.getBoundingClientRect()
+          const sectionCenter = rect.top + rect.height / 2
+          const distance = Math.abs(sectionCenter - containerCenterY)
+          if (distance < closestDistance) {
+            closestDistance = distance
+            closestId = category.id
+          }
+        }
+        if (closestId && closestId !== selectedCategory) {
+          setSelectedCategory(closestId)
+        } else if (!closestId && selectedCategory !== "") {
+          setSelectedCategory("")
+        }
+      })
+    }
+    container.addEventListener("scroll", onScroll, { passive: true })
+    return () => {
+      container.removeEventListener("scroll", onScroll)
+    }
+  }, [categories, selectedCategory])
+
+  // 键盘快捷键
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // 在输入框/文本域/选择框/可编辑区域内不触发全局快捷键，且输入法组合中不触发
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        const isFormField = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+        if (isFormField || target.isContentEditable || (e as any).isComposing) {
+          return
+        }
+      }
+      // 聚焦搜索：'/' 或 Ctrl/Cmd+K
+      if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        return
+      }
+      // 打开设置：s
+      if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "s") {
+        setShowSettings(true)
+        return
+      }
+      // 添加链接：a
+      if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "a") {
+        setEditingLink(null)
+        setShowAddLinkModal(true)
+        return
+      }
+      // 章节导航：j/k 在分类间跳转
+      if (!e.ctrlKey && !e.metaKey && (e.key.toLowerCase() === "j" || e.key.toLowerCase() === "k")) {
+        if (categories.length === 0) return
+        const idx = categories.findIndex((c) => c.id === selectedCategory)
+        if (idx === -1) return
+        const delta = e.key.toLowerCase() === "j" ? 1 : -1
+        const nextIdx = Math.min(categories.length - 1, Math.max(0, idx + delta))
+        const nextId = categories[nextIdx].id
+        handleSelectCategory(nextId)
+        return
+      }
+      // 关闭设置/对话框：Esc
+      if (e.key === "Escape") {
+        setShowSettings(false)
+        setShowAddLinkModal(false)
+        setShowBatchAddLinksModal(false)
+        setShowCategoryManagerModal(false)
+        return
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [categories, selectedCategory])
 
   if (!mounted) return null
 
@@ -260,7 +463,7 @@ export default function Home() {
       <Sidebar
         categories={categories}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
         onDeleteCategory={handleDeleteCategory}
         onReorderCategories={handleReorderCategories}
         onUpdateCategories={handleUpdateCategories}
@@ -292,23 +495,43 @@ export default function Home() {
                 type="text"
                 placeholder="输入链接内容..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  setSearchSelectedIndex(-1)
+                }}
+                onKeyDown={(e) => {
+                  if (flatMatchedLinks.length === 0) return
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault()
+                    setSearchSelectedIndex((prev) => {
+                      const next = prev + 1
+                      return next >= flatMatchedLinks.length ? flatMatchedLinks.length - 1 : next
+                    })
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault()
+                    setSearchSelectedIndex((prev) => {
+                      const next = prev - 1
+                      return next < 0 ? 0 : next
+                    })
+                  } else if (e.key === "Enter") {
+                    e.preventDefault()
+                    const idx = searchSelectedIndex >= 0 ? searchSelectedIndex : 0
+                    const target = flatMatchedLinks[idx]?.link
+                    if (target) window.open(target.url, "_blank", "noopener,noreferrer")
+                  } else if (e.key === "Escape") {
+                    e.preventDefault()
+                    setSearchQuery("")
+                    setSearchSelectedIndex(-1)
+                  }
+                }}
+                ref={(el) => (searchInputRef.current = el)}
                 className="w-full pl-10 sm:pl-12 pr-4 sm:pr-6 py-2 sm:py-3 glass-card text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-sm sm:text-base"
               />
             </div>
           )}
         </div>
 
-        {viewMode === "links" && (
-          <ToolsDrawer
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            onAddLink={() => {
-              setEditingLink(null)
-              setShowAddLinkModal(true)
-            }}
-          />
-        )}
+        {/* 工具集成到设置抽屉，不再在页面中单独展示 */}
 
         {showSettings && (
           <>
@@ -317,23 +540,51 @@ export default function Home() {
           </>
         )}
 
-        <div className="flex-1 overflow-visible px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4">
           {viewMode === "links" && (
-            <>
-              {filteredLinks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="text-6xl mb-4 opacity-50">🔗</div>
-                  <p className="text-lg text-white/70 mb-2">未找到链接</p>
-                  <p className="text-sm text-white/50">{searchQuery ? "调整搜索词试试" : "添加第一个链接来开始"}</p>
-                </div>
-              ) : (
-                <div className="cards-grid">
-                  {filteredLinks.map((link) => (
-                    <LinkCard key={link.id} link={link} onEdit={handleEditLink} onDelete={handleDeleteLink} />
-                  ))}
-                </div>
-              )}
-            </>
+            <div className="space-y-6">
+              {(() => {
+                // 简易虚拟窗口：仅渲染选中分类附近的若干分区（且有结果的）
+                const nonEmptyOrdered = categories.filter((c) => (filteredLinksByCategory[c.id] || []).length > 0)
+                const centerId = selectedCategory
+                const centerIndex = nonEmptyOrdered.findIndex((c) => c.id === centerId)
+                const BEFORE = 2
+                const AFTER = 2
+                let visibleIds = new Set<string>()
+                if (nonEmptyOrdered.length > 0) {
+                  const start = centerIndex >= 0 ? Math.max(0, centerIndex - BEFORE) : 0
+                  const end = centerIndex >= 0 ? Math.min(nonEmptyOrdered.length, centerIndex + AFTER + 1) : Math.min(nonEmptyOrdered.length, BEFORE + AFTER + 1)
+                  for (const c of nonEmptyOrdered.slice(start, end)) visibleIds.add(c.id)
+                }
+
+                return categories.map((cat) => {
+                const linksInCat = filteredLinksByCategory[cat.id] || []
+                  if (linksInCat.length === 0) return null
+                  if (visibleIds.size > 0 && !visibleIds.has(cat.id)) return null
+                return (
+                  <section
+                    key={cat.id}
+                    id={`section-${cat.id}`}
+                    ref={(el) => (sectionRefs.current[cat.id] = el)}
+                    className="scroll-mt-24"
+                  >
+                    <h2 className="text-white/90 text-base font-semibold mb-2">{cat.name}</h2>
+                    <div className="cards-grid">
+                      {linksInCat.map((link) => (
+                        <LinkCard
+                          key={link.id}
+                          link={link}
+                          onEdit={handleEditLink}
+                          onDelete={handleDeleteLink}
+                          highlight={searchQuery}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )
+                })
+              })()}
+            </div>
           )}
 
           {viewMode === "json-editor" && (
@@ -398,7 +649,67 @@ export default function Home() {
             <DrawerHeader className="border-b border-white/10">
               <DrawerTitle className="text-white">设置</DrawerTitle>
             </DrawerHeader>
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-4 overflow-y-auto">
+              {/* 工具栏 */}
+              <div>
+                <label className="block text-sm text-white/80 mb-3">工具栏</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => {
+                      setViewMode(viewMode === "json-editor" ? "links" : "json-editor")
+                      setShowSettings(false)
+                    }}
+                    className={`flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg transition-colors ${
+                      viewMode === "json-editor"
+                        ? "bg-white/25 text-white"
+                        : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                    }`}
+                    title="JSON编辑"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h4M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+                      <line x1="9" y1="9" x2="9" y2="15" />
+                      <line x1="15" y1="9" x2="15" y2="15" />
+                    </svg>
+                    <span className="text-xs">JSON编辑</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewMode(viewMode === "password-generator" ? "links" : "password-generator")
+                      setShowSettings(false)
+                    }}
+                    className={`flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg transition-colors ${
+                      viewMode === "password-generator"
+                        ? "bg-white/25 text-white"
+                        : "bg-white/10 text-white/70 hover:bg-white/15 hover:text-white"
+                    }`}
+                    title="密码生成"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                      <path d="M7 11V7a5 5 0 0110 0v4" />
+                      <circle cx="12" cy="16" r="1" />
+                    </svg>
+                    <span className="text-xs">密码生成</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingLink(null)
+                      setShowAddLinkModal(true)
+                      setShowSettings(false)
+                    }}
+                    className="flex flex-col items-center justify-center gap-2 px-3 py-3 rounded-lg bg-white/10 text-white/70 hover:bg-white/15 hover:text-white transition-colors"
+                    title="添加链接"
+                  >
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span className="text-xs">添加链接</span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm text-white/80 mb-1">背景颜色</label>
                 <div className="flex items-center gap-2">
@@ -417,7 +728,36 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="pt-2 space-y-2">
+              <div className="border-t border-white/10 pt-4 space-y-2">
+                <div>
+                  <label className="block text-sm text-white/80 mb-2">搜索字段</label>
+                  <div className="flex items-center gap-4 text-white/80">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={includeName}
+                        onChange={(e) => setIncludeName(e.target.checked)}
+                      />
+                      名称
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={includeAlias}
+                        onChange={(e) => setIncludeAlias(e.target.checked)}
+                      />
+                      别名
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={includeUrl}
+                        onChange={(e) => setIncludeUrl(e.target.checked)}
+                      />
+                      URL
+                    </label>
+                  </div>
+                </div>
                 <button
                   onClick={handleExport}
                   className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
@@ -432,7 +772,7 @@ export default function Home() {
                 </button>
               </div>
 
-              <div className="pt-2 space-y-2">
+              <div className="border-t border-white/10 pt-4 space-y-2">
                 <button
                   onClick={() => setBackgroundImage("")}
                   className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
