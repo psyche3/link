@@ -56,7 +56,7 @@ export default function AddCategoryModal({ onAdd, onClose }: AddCategoryModalPro
               添加分类
             </button>
           </div>
-      </form>
+        </form>
     </Modal>
   )
 }

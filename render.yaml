@@ -1,0 +1,14 @@
+# Render 部署配置
+
+# Build Command: npm install
+# Start Command: node server/index.js
+# Environment: Node
+
+# 环境变量示例（在 Render 控制台设置）
+# PORT=自动设置（Render 会自动设置）
+# AWS_ACCESS_KEY_ID=your-access-key
+# AWS_SECRET_ACCESS_KEY=your-secret-key
+# AWS_REGION=us-east-1
+# AWS_S3_BUCKET=your-bucket-name
+# ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://your-frontend.netlify.app
+

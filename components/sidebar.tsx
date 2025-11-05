@@ -11,6 +11,8 @@ interface Category {
   name: string
 }
 
+type ViewMode = "links" | "json-editor" | "password-generator"
+
 interface SidebarProps {
   categories: Category[]
   selectedCategory: string
@@ -19,8 +21,8 @@ interface SidebarProps {
   onReorderCategories: (categories: Category[]) => void
   onUpdateCategories: (categories: Category[]) => void
   onShowCategoryManager: () => void
-  viewMode: string
-  onViewModeChange: (mode: string) => void
+  viewMode: ViewMode
+  onViewModeChange: (mode: ViewMode) => void
 }
 
 interface SortableCategoryItemProps {

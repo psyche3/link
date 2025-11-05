@@ -108,44 +108,44 @@ export default function JsonEditor({ categories, links, onUpdate, onBack }: Json
             <span className="hidden sm:inline">{isExpanded ? "折叠" : "展开"}</span>
           </button>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={handleFormat}
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={handleFormat}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors text-sm"
-            title="格式化JSON"
-          >
-            <Wand2 size={16} />
+          title="格式化JSON"
+        >
+          <Wand2 size={16} />
             <span className="hidden sm:inline">格式化</span>
-          </button>
-          <button
-            onClick={handleCopy}
+        </button>
+        <button
+          onClick={handleCopy}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors text-sm"
-          >
-            <Copy size={16} />
+        >
+          <Copy size={16} />
             <span className="hidden sm:inline">{copied ? "已复制" : "复制"}</span>
-          </button>
-          <button
-            onClick={handleDownload}
+        </button>
+        <button
+          onClick={handleDownload}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors text-sm"
-          >
-            <Download size={16} />
+        >
+          <Download size={16} />
             <span className="hidden sm:inline">下载</span>
-          </button>
-          <label
-            htmlFor="json-import"
+        </button>
+        <label
+          htmlFor="json-import"
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors cursor-pointer text-sm"
-          >
-            <Upload size={16} />
+        >
+          <Upload size={16} />
             <span className="hidden sm:inline">导入</span>
-          </label>
-          <input id="json-import" type="file" accept=".json" onChange={handleImport} className="hidden" />
-          <button
-            onClick={handleSave}
+        </label>
+        <input id="json-import" type="file" accept=".json" onChange={handleImport} className="hidden" />
+        <button
+          onClick={handleSave}
             className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-500/30 hover:bg-blue-500/40 text-blue-200 rounded-lg transition-colors font-medium text-sm"
-          >
+        >
             <span className="hidden sm:inline">保存</span>
             <span className="sm:hidden">✓</span>
-          </button>
+        </button>
         </div>
       </div>
 
@@ -154,16 +154,16 @@ export default function JsonEditor({ categories, links, onUpdate, onBack }: Json
       )}
 
       {isExpanded && (
-        <textarea
-          ref={textareaRef}
-          value={jsonContent}
-          onChange={(e) => {
-            setJsonContent(e.target.value)
-            setError("")
-          }}
+      <textarea
+        ref={textareaRef}
+        value={jsonContent}
+        onChange={(e) => {
+          setJsonContent(e.target.value)
+          setError("")
+        }}
           className="flex-1 p-4 font-mono text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 resize-none min-h-[200px]"
-          placeholder="编辑 JSON 数据..."
-        />
+        placeholder="编辑 JSON 数据..."
+      />
       )}
 
       {!isExpanded && (
