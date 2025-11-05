@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "postbuild": "node scripts/create-routes-manifest.js",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
