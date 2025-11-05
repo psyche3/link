@@ -11,9 +11,10 @@ interface LinkCardProps {
   onEdit: (link: Link) => void
   onDelete: (id: string) => void
   highlight?: string
+  onVisit?: (link: Link) => void
 }
 
-export default function LinkCard({ link, onEdit, onDelete, highlight }: LinkCardProps) {
+export default function LinkCard({ link, onEdit, onDelete, highlight, onVisit }: LinkCardProps) {
   // 获取图标类型，优先使用保存的，否则智能匹配
   // 直接计算，不使用 useState，避免 hydration 问题
   const rawIconType = link.iconType || findIconParkIcon(link.url, link.name) || "Link"
@@ -74,13 +75,27 @@ export default function LinkCard({ link, onEdit, onDelete, highlight }: LinkCard
       </div>
 
       <h3 className="font-semibold text-white text-sm mb-1 truncate">{renderHighlight(link.name)}</h3>
-      {link.alias && <p className="text-xs text-white/60 mb-2 truncate">{renderHighlight(link.alias)}</p>}
+      {link.alias && <p className="text-xs text-white/60 mb-1 truncate">{renderHighlight(link.alias)}</p>}
+      {Array.isArray(link.tags) && link.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {link.tags.map((t) => (
+            <span key={t} className="px-1.5 py-0.5 rounded-full text-[10px] bg-white/10 text-white/70 border border-white/15">
+              {renderHighlight(t)}
+            </span>
+          ))}
+        </div>
+      )}
+      {highlight && (
+        <p className="text-[11px] text-white/40 mb-2 truncate">{renderHighlight(link.url)}</p>
+      )}
 
       <a
         href={link.url}
         target="_blank"
         rel="noopener noreferrer"
         className="mt-auto flex items-center justify-center gap-2 bg-white/15 hover:bg-white/25 text-white py-1.5 rounded-lg transition-colors text-xs font-medium border border-white/20"
+        onClick={() => onVisit?.(link)}
+        aria-label={`打开链接：${link.name}`}
       >
         <ExternalLink size={14} />
         访问

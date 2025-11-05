@@ -2,10 +2,12 @@
 
 import type React from "react"
 import { useState, useEffect, useMemo, useRef } from "react"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import Pinyin from "tiny-pinyin"
 import { Search } from "lucide-react"
 import Sidebar from "@/components/sidebar"
 import LinkCard from "@/components/link-card"
+import CategorySection from "@/components/category-section"
 import AddLinkModal from "@/components/add-link-modal"
 import CategoryManagerModal from "@/components/category-manager-modal"
 import TimeDisplay from "@/components/time-display"
@@ -23,6 +25,7 @@ export interface Link {
   categoryId: string
   favicon?: string
   iconType?: string // IconPark 图标类型
+  tags?: string[]
 }
 
 export interface Category {
@@ -53,7 +56,29 @@ export default function Home() {
   const [includeName, setIncludeName] = useState(true)
   const [includeAlias, setIncludeAlias] = useState(true)
   const [includeUrl, setIncludeUrl] = useState(true)
+  const [includeTags, setIncludeTags] = useState(true)
   const [searchSelectedIndex, setSearchSelectedIndex] = useState(-1)
+  // 撤销/重做历史
+  const historyRef = useRef<{ categories: Category[]; links: Link[] }[]>([])
+  const futureRef = useRef<{ categories: Category[]; links: Link[] }[]>([])
+  const recordSnapshot = () => {
+    historyRef.current.push({ categories: [...categories], links: [...links] })
+    futureRef.current = []
+  }
+  const undo = () => {
+    const prev = historyRef.current.pop()
+    if (!prev) return
+    futureRef.current.push({ categories: [...categories], links: [...links] })
+    setCategories(prev.categories)
+    setLinks(prev.links)
+  }
+  const redo = () => {
+    const next = futureRef.current.pop()
+    if (!next) return
+    historyRef.current.push({ categories: [...categories], links: [...links] })
+    setCategories(next.categories)
+    setLinks(next.links)
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -75,6 +100,7 @@ export default function Home() {
         url: "https://github.com",
         categoryId: "1",
         alias: "代码仓库",
+        tags: ["代码", "git"],
       },
       {
         id: "2",
@@ -82,6 +108,7 @@ export default function Home() {
         url: "https://stackoverflow.com",
         categoryId: "1",
         alias: "问答社区",
+        tags: ["问答", "社区"],
       },
       {
         id: "3",
@@ -89,6 +116,7 @@ export default function Home() {
         url: "https://figma.com",
         categoryId: "2",
         alias: "设计工具",
+        tags: ["设计"],
       },
       {
         id: "4",
@@ -96,6 +124,7 @@ export default function Home() {
         url: "https://slack.com",
         categoryId: "3",
         alias: "团队沟通",
+        tags: ["沟通"],
       },
     ]
 
@@ -133,7 +162,26 @@ export default function Home() {
   }, [categories, links, backgroundImage, backgroundColor, mounted])
 
 
+  // 访问链接时记录最近使用时间与次数
+  const handleVisitLink = (link: Link) => {
+    setLinks((prev) =>
+      prev.map((l) =>
+        l.id === link.id
+          ? {
+              ...l,
+              // 使用可选字段保存统计信息
+              ...(l as any),
+              lastAccessedAt: Date.now(),
+              clickCount: ((l as any).clickCount || 0) + 1,
+            }
+          : l
+      )
+    )
+  }
+
+
   const handleDeleteCategory = (id: string) => {
+    recordSnapshot()
     setCategories(categories.filter((c) => c.id !== id))
     setLinks(links.filter((l) => l.categoryId !== id))
     if (selectedCategory === id && categories.length > 0) {
@@ -142,10 +190,12 @@ export default function Home() {
   }
 
   const handleReorderCategories = (newCategories: Category[]) => {
+    recordSnapshot()
     setCategories(newCategories)
   }
 
   const handleUpdateCategories = (updatedCategories: Category[]) => {
+    recordSnapshot()
     setCategories(updatedCategories)
     // 如果删除的分类包含链接，同时删除这些链接
     const remainingCategoryIds = new Set(updatedCategories.map((cat) => cat.id))
@@ -157,6 +207,7 @@ export default function Home() {
   }
 
   const handleBatchAddLinks = (newLinks: Omit<Link, "id">[]) => {
+    recordSnapshot()
     const linksWithIds = newLinks.map((link, index) => ({
       ...link,
       id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
@@ -166,6 +217,7 @@ export default function Home() {
   }
 
   const handleAddLink = (link: Omit<Link, "id">) => {
+    recordSnapshot()
     if (editingLink) {
       setLinks(links.map((l) => (l.id === editingLink.id ? { ...link, id: editingLink.id } : l)))
       setEditingLink(null)
@@ -176,6 +228,7 @@ export default function Home() {
   }
 
   const handleDeleteLink = (id: string) => {
+    recordSnapshot()
     setLinks(links.filter((l) => l.id !== id))
   }
 
@@ -208,6 +261,23 @@ export default function Home() {
     link.href = url
     link.download = "links-backup.json"
     link.click()
+  }
+
+  const loadSampleData = () => {
+    const sampleCategories: Category[] = [
+      { id: "1", name: "开发工具" },
+      { id: "2", name: "设计工具" },
+      { id: "3", name: "通讯工具" },
+    ]
+    const sampleLinks: Link[] = [
+      { id: "1", name: "GitHub", url: "https://github.com", categoryId: "1", alias: "代码仓库", tags: ["代码", "git"] },
+      { id: "2", name: "Stack Overflow", url: "https://stackoverflow.com", categoryId: "1", alias: "问答社区", tags: ["问答"] },
+      { id: "3", name: "Figma", url: "https://figma.com", categoryId: "2", alias: "设计工具", tags: ["设计"] },
+      { id: "4", name: "Slack", url: "https://slack.com", categoryId: "3", alias: "团队沟通", tags: ["沟通"] },
+    ]
+    setCategories(sampleCategories)
+    setLinks(sampleLinks)
+    setSelectedCategory(sampleCategories[0].id)
   }
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,6 +315,7 @@ export default function Home() {
             alias: typeof l.alias === "string" ? l.alias : undefined,
             categoryId: l.categoryId,
             iconType: typeof l.iconType === "string" ? l.iconType : undefined,
+            tags: Array.isArray(l.tags) ? l.tags.filter((t: any) => typeof t === "string") : undefined,
           }))
 
         if (validCategories.length === 0 && validLinks.length === 0) {
@@ -263,8 +334,14 @@ export default function Home() {
 
   // 右侧展示全部分类分区；按搜索词与字段选择过滤每个分区内的链接
   const filteredLinksByCategory = useMemo(() => {
-    const query = searchQuery.toLowerCase()
-    const queryPinyin = Pinyin.isSupported() ? Pinyin.convertToPinyin(searchQuery, "", true).toLowerCase() : ""
+    const raw = searchQuery.trim()
+    const query = raw.toLowerCase()
+    const queryPinyin = Pinyin.isSupported() ? Pinyin.convertToPinyin(raw, "", true).toLowerCase() : ""
+    // #tag 语法：按空格拆分，取以#开头的作为标签过滤，必须全部匹配
+    const tagFilters = raw
+      .split(/\s+/)
+      .filter((t) => t.startsWith("#") && t.length > 1)
+      .map((t) => t.slice(1).toLowerCase())
     const matchText = (text?: string) => {
       if (!text) return false
       const lower = text.toLowerCase()
@@ -283,14 +360,30 @@ export default function Home() {
       const matchName = includeName && matchText(link.name)
       const matchAlias = includeAlias && matchText(link.alias)
       const matchUrl = includeUrl && matchText(link.url)
-      const match = matchName || matchAlias || matchUrl
-      if (match) {
+      const matchTagsText = includeTags && Array.isArray(link.tags) ? link.tags.some((t) => matchText(t)) : false
+      const match = matchName || matchAlias || matchUrl || matchTagsText
+      const passTagFilter = tagFilters.length === 0
+        ? true
+        : (Array.isArray(link.tags) && tagFilters.every((tf) => link.tags!.some((t) => t.toLowerCase() === tf)))
+      if (match && passTagFilter) {
         if (!byCategory[link.categoryId]) byCategory[link.categoryId] = []
         byCategory[link.categoryId].push(link)
       }
     }
+    // 最近使用排序：lastAccessedAt > clickCount > name
+    Object.keys(byCategory).forEach((key) => {
+      byCategory[key].sort((a, b) => {
+        const aT = (a as any).lastAccessedAt || 0
+        const bT = (b as any).lastAccessedAt || 0
+        if (bT !== aT) return bT - aT
+        const aC = (a as any).clickCount || 0
+        const bC = (b as any).clickCount || 0
+        if (bC !== aC) return bC - aC
+        return a.name.localeCompare(b.name)
+      })
+    })
     return byCategory
-  }, [categories, links, searchQuery, includeName, includeAlias, includeUrl])
+  }, [categories, links, searchQuery, includeName, includeAlias, includeUrl, includeTags])
 
   // 扁平化匹配结果用于键盘导航（按分类顺序）
   const flatMatchedLinks = useMemo(() => {
@@ -306,11 +399,26 @@ export default function Home() {
     return result
   }, [categories, filteredLinksByCategory])
 
-  // 分区滚动与同步
+  // 仅包含有结果的分类（用于渲染与虚拟滚动）
+  const nonEmptyCategories = useMemo(() => {
+    return categories.filter((c) => (filteredLinksByCategory[c.id] || []).length > 0)
+  }, [categories, filteredLinksByCategory])
+
+  // 分区滚动与同步（虚拟化）
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
   const isScrollingProgrammatically = useRef(false)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // 使用 @tanstack/react-virtual 进行分区虚拟化
+  const rowVirtualizer = useVirtualizer({
+    count: nonEmptyCategories.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => 220,
+    overscan: 6,
+    // 开启元素实际高度测量，减少模块间的空白误差
+    measureElement: (el) => el.getBoundingClientRect().height,
+  })
 
   const scrollToCategory = (categoryId: string) => {
     const container = scrollContainerRef.current
@@ -324,19 +432,16 @@ export default function Home() {
       }, 400)
       return
     }
-    const el = sectionRefs.current[categoryId]
-    if (!el) return
-    const containerRect = container.getBoundingClientRect()
-    const elRect = el.getBoundingClientRect()
-    const currentScrollTop = container.scrollTop
-    const offset = elRect.top - containerRect.top
-    const targetTop = currentScrollTop + offset - containerRect.height / 2 + elRect.height / 2
-    isScrollingProgrammatically.current = true
-    container.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" })
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
-    scrollTimeoutRef.current = setTimeout(() => {
-      isScrollingProgrammatically.current = false
-    }, 500)
+    // 使用虚拟化索引滚动居中
+    const idx = nonEmptyCategories.findIndex((c) => c.id === categoryId)
+    if (idx >= 0) {
+      isScrollingProgrammatically.current = true
+      rowVirtualizer.scrollToIndex(idx, { align: "center" })
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current)
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrollingProgrammatically.current = false
+      }, 500)
+    }
   }
 
   const handleSelectCategory = (id: string) => {
@@ -354,24 +459,24 @@ export default function Home() {
       ticking = true
       requestAnimationFrame(() => {
         ticking = false
-        const containerRect = container.getBoundingClientRect()
-        const containerCenterY = containerRect.top + containerRect.height / 2
-        let closestId = ""
+        const virtualItems = rowVirtualizer.getVirtualItems()
+        if (!virtualItems || virtualItems.length === 0) return
+        const containerHeight = container.clientHeight
+        const containerCenter = container.scrollTop + containerHeight / 2
+        let closestIdx = -1
         let closestDistance = Infinity
-        for (const category of categories) {
-          const el = sectionRefs.current[category.id]
-          if (!el) continue
-          const rect = el.getBoundingClientRect()
-          const sectionCenter = rect.top + rect.height / 2
-          const distance = Math.abs(sectionCenter - containerCenterY)
-          if (distance < closestDistance) {
-            closestDistance = distance
-            closestId = category.id
+        for (const v of virtualItems) {
+          const itemCenter = v.start + v.size / 2
+          const dist = Math.abs(itemCenter - containerCenter)
+          if (dist < closestDistance) {
+            closestDistance = dist
+            closestIdx = v.index
           }
         }
-        if (closestId && closestId !== selectedCategory) {
-          setSelectedCategory(closestId)
-        } else if (!closestId && selectedCategory !== "") {
+        const candidate = closestIdx >= 0 ? nonEmptyCategories[closestIdx]?.id : ""
+        if (candidate && candidate !== selectedCategory) {
+          setSelectedCategory(candidate)
+        } else if (!candidate && selectedCategory !== "") {
           setSelectedCategory("")
         }
       })
@@ -380,7 +485,7 @@ export default function Home() {
     return () => {
       container.removeEventListener("scroll", onScroll)
     }
-  }, [categories, selectedCategory])
+  }, [nonEmptyCategories, selectedCategory, rowVirtualizer])
 
   // 键盘快捷键
   useEffect(() => {
@@ -405,6 +510,21 @@ export default function Home() {
         setShowSettings(true)
         return
       }
+      // 撤销/重做：Ctrl/Cmd+Z，Ctrl/Cmd+Y 或 Ctrl/Cmd+Shift+Z
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault()
+        if (e.shiftKey) {
+          redo()
+        } else {
+          undo()
+        }
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault()
+        redo()
+        return
+      }
       // 添加链接：a
       if (!e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "a") {
         setEditingLink(null)
@@ -420,6 +540,29 @@ export default function Home() {
         const nextIdx = Math.min(categories.length - 1, Math.max(0, idx + delta))
         const nextId = categories[nextIdx].id
         handleSelectCategory(nextId)
+        return
+      }
+      // Alt+↑ / Alt+↓ 切换上/下一个分类
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        if (categories.length === 0) return
+        const idx = categories.findIndex((c) => c.id === selectedCategory)
+        const delta = e.key === "ArrowDown" ? 1 : -1
+        const cur = idx === -1 ? 0 : idx
+        const nextIdx = Math.min(categories.length - 1, Math.max(0, cur + delta))
+        handleSelectCategory(categories[nextIdx].id)
+        return
+      }
+      // Alt+数字 快速跳转到前 9 个分类；Alt+0 选中“全部”
+      if (e.altKey && /^\d$/.test(e.key)) {
+        const n = Number(e.key)
+        if (n === 0) {
+          handleSelectCategory("")
+          return
+        }
+        const idx = n - 1
+        if (idx >= 0 && idx < categories.length) {
+          handleSelectCategory(categories[idx].id)
+        }
         return
       }
       // 关闭设置/对话框：Esc
@@ -438,7 +581,7 @@ export default function Home() {
   if (!mounted) return null
 
   return (
-    <main className="flex h-screen overflow-hidden relative">
+    <main className="flex h-screen overflow-hidden relative" role="main">
       <div
         className="absolute inset-0 z-0"
         style={
@@ -457,7 +600,7 @@ export default function Home() {
               }
         }
       >
-        <div className="absolute inset-0 backdrop-blur-3xl bg-black/30 dark:bg-black/40" />
+        <div className="absolute inset-0 backdrop-blur-xl bg-black/30 dark:bg-black/40" />
       </div>
 
       <Sidebar
@@ -517,7 +660,10 @@ export default function Home() {
                     e.preventDefault()
                     const idx = searchSelectedIndex >= 0 ? searchSelectedIndex : 0
                     const target = flatMatchedLinks[idx]?.link
-                    if (target) window.open(target.url, "_blank", "noopener,noreferrer")
+                    if (target) {
+                      handleVisitLink(target)
+                      window.open(target.url, "_blank", "noopener,noreferrer")
+                    }
                   } else if (e.key === "Escape") {
                     e.preventDefault()
                     setSearchQuery("")
@@ -525,6 +671,8 @@ export default function Home() {
                   }
                 }}
                 ref={(el) => (searchInputRef.current = el)}
+                aria-label="搜索链接"
+                role="searchbox"
                 className="w-full pl-10 sm:pl-12 pr-4 sm:pr-6 py-2 sm:py-3 glass-card text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-sm sm:text-base"
               />
             </div>
@@ -543,47 +691,63 @@ export default function Home() {
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4">
           {viewMode === "links" && (
             <div className="space-y-6">
-              {(() => {
-                // 简易虚拟窗口：仅渲染选中分类附近的若干分区（且有结果的）
-                const nonEmptyOrdered = categories.filter((c) => (filteredLinksByCategory[c.id] || []).length > 0)
-                const centerId = selectedCategory
-                const centerIndex = nonEmptyOrdered.findIndex((c) => c.id === centerId)
-                const BEFORE = 2
-                const AFTER = 2
-                let visibleIds = new Set<string>()
-                if (nonEmptyOrdered.length > 0) {
-                  const start = centerIndex >= 0 ? Math.max(0, centerIndex - BEFORE) : 0
-                  const end = centerIndex >= 0 ? Math.min(nonEmptyOrdered.length, centerIndex + AFTER + 1) : Math.min(nonEmptyOrdered.length, BEFORE + AFTER + 1)
-                  for (const c of nonEmptyOrdered.slice(start, end)) visibleIds.add(c.id)
-                }
-
-                return categories.map((cat) => {
-                const linksInCat = filteredLinksByCategory[cat.id] || []
+              {categories.length === 0 && links.length === 0 && (
+                <div className="glass-card-sm p-6 text-white/80 text-sm">
+                  <p className="mb-3">还没有任何数据，您可以：</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={loadSampleData}
+                      className="px-3 py-2 rounded bg-white/10 hover:bg白/20 hover:bg-white/20 border border-white/20"
+                    >
+                      载入示例数据
+                    </button>
+                    <button
+                      onClick={() => document.getElementById(importInputId)?.click()}
+                      className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 border border-white/20"
+                    >
+                      从文件导入
+                    </button>
+                    <button
+                      onClick={() => setShowSettings(true)}
+                      className="px-3 py-2 rounded bg-white/10 hover:bg-white/20 border border-white/20"
+                    >
+                      打开设置
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div style={{ height: rowVirtualizer.getTotalSize(), position: "relative" }}>
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const cat = nonEmptyCategories[virtualRow.index]
+                  if (!cat) return null
+                  const linksInCat = filteredLinksByCategory[cat.id] || []
                   if (linksInCat.length === 0) return null
-                  if (visibleIds.size > 0 && !visibleIds.has(cat.id)) return null
-                return (
-                  <section
-                    key={cat.id}
-                    id={`section-${cat.id}`}
-                    ref={(el) => (sectionRefs.current[cat.id] = el)}
-                    className="scroll-mt-24"
-                  >
-                    <h2 className="text-white/90 text-base font-semibold mb-2">{cat.name}</h2>
-                    <div className="cards-grid">
-                      {linksInCat.map((link) => (
-                        <LinkCard
-                          key={link.id}
-                          link={link}
-                          onEdit={handleEditLink}
-                          onDelete={handleDeleteLink}
-                          highlight={searchQuery}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )
-                })
-              })()}
+                  return (
+                    <section
+                      key={cat.id}
+                      id={`section-${cat.id}`}
+                      ref={(el) => {
+                        sectionRefs.current[cat.id] = el
+                      }}
+                      className="scroll-mt-24"
+                      role="region"
+                      aria-labelledby={`heading-${cat.id}`}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${virtualRow.start}px)` }}
+                    >
+                      <CategorySection
+                        catId={cat.id}
+                        title={cat.name}
+                        links={linksInCat}
+                        highlight={searchQuery}
+                        onEdit={handleEditLink}
+                        onDelete={handleDeleteLink}
+                        onVisit={handleVisitLink}
+                        scrollContainer={() => scrollContainerRef.current}
+                      />
+                    </section>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -755,6 +919,14 @@ export default function Home() {
                         onChange={(e) => setIncludeUrl(e.target.checked)}
                       />
                       URL
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={includeTags}
+                        onChange={(e) => setIncludeTags(e.target.checked)}
+                      />
+                      标签
                     </label>
                   </div>
                 </div>
