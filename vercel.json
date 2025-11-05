@@ -1,7 +1,7 @@
 {
   "version": 2,
   "buildCommand": "pnpm build",
-  "outputDirectory": ".next",
+  "outputDirectory": "out",
   "framework": "nextjs",
   "env": {
     "NODE_ENV": "production"
