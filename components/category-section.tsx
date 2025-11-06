@@ -75,9 +75,9 @@ export default function CategorySection({
               key={v.index}
               style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}
             >
-              <div className="flex gap-3 flex-wrap">
+              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                 {rowItems.map((link) => (
-                  <div key={link.id} style={{ width: percentWidth }}>
+                  <div key={link.id} className="min-h-[140px]">
                     <LinkCard
                       link={link}
                       onEdit={onEdit}

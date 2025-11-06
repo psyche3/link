@@ -48,6 +48,7 @@ export default function Home() {
   const [backgroundImage, setBackgroundImage] = useState<string>("")
   const [backgroundColor, setBackgroundColor] = useState<string>("")
   const [showSettings, setShowSettings] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
   const importInputId = "import-file-input"
   const backgroundInputId = "background-file-input"
   const [viewMode, setViewMode] = useState<ViewMode>("links")
@@ -61,9 +62,13 @@ export default function Home() {
   // 撤销/重做历史
   const historyRef = useRef<{ categories: Category[]; links: Link[] }[]>([])
   const futureRef = useRef<{ categories: Category[]; links: Link[] }[]>([])
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
   const recordSnapshot = () => {
     historyRef.current.push({ categories: [...categories], links: [...links] })
     futureRef.current = []
+    setCanUndo(historyRef.current.length > 0)
+    setCanRedo(false)
   }
   const undo = () => {
     const prev = historyRef.current.pop()
@@ -71,6 +76,8 @@ export default function Home() {
     futureRef.current.push({ categories: [...categories], links: [...links] })
     setCategories(prev.categories)
     setLinks(prev.links)
+    setCanUndo(historyRef.current.length > 0)
+    setCanRedo(futureRef.current.length > 0)
   }
   const redo = () => {
     const next = futureRef.current.pop()
@@ -78,6 +85,8 @@ export default function Home() {
     historyRef.current.push({ categories: [...categories], links: [...links] })
     setCategories(next.categories)
     setLinks(next.links)
+    setCanUndo(historyRef.current.length > 0)
+    setCanRedo(futureRef.current.length > 0)
   }
 
   useEffect(() => {
@@ -149,6 +158,11 @@ export default function Home() {
     setBackgroundColor(savedBgColor)
     if (parsedCategories.length > 0) {
       setSelectedCategory(parsedCategories[0].id)
+    }
+    // 首次使用引导：当本地存储为空（首次进入）且未关闭过引导
+    const seen = localStorage.getItem("onboardingSeen") === "1"
+    if (!seen && !savedCategories && !savedLinks) {
+      setShowOnboarding(true)
     }
   }, [])
 
@@ -670,23 +684,50 @@ export default function Home() {
                     setSearchSelectedIndex(-1)
                   }
                 }}
-                ref={(el) => (searchInputRef.current = el)}
+                ref={(el) => {
+                  searchInputRef.current = el
+                }}
                 aria-label="搜索链接"
                 role="searchbox"
                 className="w-full pl-10 sm:pl-12 pr-4 sm:pr-6 py-2 sm:py-3 glass-card text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 transition-all text-sm sm:text-base"
               />
             </div>
           )}
+
+        {showOnboarding && (
+          <div className="glass-card-sm p-4 text-white/85 text-sm mb-4" role="note" aria-live="polite">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="font-medium mb-1">欢迎使用！快速开始：</div>
+                <ul className="list-disc list-inside space-y-1 text-white/80">
+                  <li>按 / 或 Ctrl/Cmd+K 聚焦搜索；Alt+↑/↓ 切换分类；Alt+1..9 快速跳转</li>
+                  <li>可输入 #标签 进行过滤，例如：#设计 #工具</li>
+                  <li>可导入 JSON 数据，或先加载示例数据体验</li>
+                </ul>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={loadSampleData} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 border border-white/20">载入示例数据</button>
+                  <button onClick={() => document.getElementById(importInputId)?.click()} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 border border-white/20">从文件导入</button>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowOnboarding(false)
+                  localStorage.setItem("onboardingSeen", "1")
+                }}
+                className="text-white/60 hover:text-white"
+                aria-label="关闭引导"
+                title="关闭引导"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
         </div>
 
-        {/* 工具集成到设置抽屉，不再在页面中单独展示 */}
-
-        {showSettings && (
-          <>
-            <input id={importInputId} type="file" accept=".json" onChange={handleImport} className="hidden" />
-            <input id={backgroundInputId} type="file" accept="image/*" onChange={handleBackgroundUpload} className="hidden" />
-          </>
-        )}
+        {/* 隐藏的文件输入，始终渲染以支持从任何地方触发 */}
+        <input id={importInputId} type="file" accept=".json" onChange={handleImport} className="hidden" />
+        <input id={backgroundInputId} type="file" accept="image/*" onChange={handleBackgroundUpload} className="hidden" />
 
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8 pt-2 sm:pt-4">
           {viewMode === "links" && (
@@ -894,6 +935,29 @@ export default function Home() {
 
               <div className="border-t border-white/10 pt-4 space-y-2">
                 <div>
+                  <label className="block text-sm text-white/80 mb-2">撤销/重做</label>
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={undo}
+                      disabled={!canUndo}
+                      className="flex-1 px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="撤销 (Ctrl/Cmd+Z)"
+                    >
+                      <span className="text-xs">撤销</span>
+                      <span className="text-[10px] text-white/60 block mt-0.5">Ctrl+Z</span>
+                    </button>
+                    <button
+                      onClick={redo}
+                      disabled={!canRedo}
+                      className="flex-1 px-3 py-2 rounded-md bg-white/10 hover:bg-white/20 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      title="重做 (Ctrl/Cmd+Y)"
+                    >
+                      <span className="text-xs">重做</span>
+                      <span className="text-[10px] text-white/60 block mt-0.5">Ctrl+Y</span>
+                    </button>
+                  </div>
+                </div>
+                <div>
                   <label className="block text-sm text-white/80 mb-2">搜索字段</label>
                   <div className="flex items-center gap-4 text-white/80">
                     <label className="flex items-center gap-2 text-sm">
@@ -941,6 +1005,15 @@ export default function Home() {
                   className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
                 >
                   导入数据
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("onboardingSeen")
+                    setShowOnboarding(true)
+                  }}
+                  className="w-full text-left px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                >
+                  显示首次使用引导
                 </button>
               </div>
 
