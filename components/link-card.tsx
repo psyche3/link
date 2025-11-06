@@ -42,7 +42,7 @@ export default function LinkCard({ link, onEdit, onDelete, highlight, onVisit }:
   }
 
   return (
-    <div className="group relative glass-card-sm p-3 shadow-md hover:shadow-lg transition-colors duration-200 flex flex-col z-10">
+    <div className="group relative glass-card-sm p-3 shadow-md hover:shadow-lg transition-colors duration-200 flex flex-col h-full z-10">
       <div className="flex items-start justify-between mb-2">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-white/20 to-white/10 border border-white/30 flex items-center justify-center overflow-hidden shadow-sm">
           <Icon
